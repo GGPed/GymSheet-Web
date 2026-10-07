@@ -81,11 +81,11 @@ export default function App() {
 
   const workoutsSinceBackup = useLiveQuery(async () => getSetting('workoutsSinceBackup', 0)) ?? 0
   const lastBackupAt = useLiveQuery(async () => getSetting('lastBackupAt', 0)) ?? 0
-  const backupBaseline = lastBackupAt || activeSheet.importedAt
+  const backupBaseline = lastBackupAt || activeSheet?.importedAt || Date.now()
   const backupDue = workoutsSinceBackup >= 5 || Date.now() - backupBaseline >= 14 * 86400000
   const backupStrong = workoutsSinceBackup >= 10 || Date.now() - backupBaseline >= 28 * 86400000
 
-  if (activeSheet === undefined) return <div className="splash"><img src="/icon.svg" alt="" /><strong>GymSheet</strong></div>
+  if (activeSheet === undefined) return <div className="splash"><img src="/icon-192.png" alt="" /><strong>GymSheet</strong></div>
   if (!activeSheet) return <><Onboarding /><PwaPrompts /></>
 
   const changeWeek = (delta: number) => {
