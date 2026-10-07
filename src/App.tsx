@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, finishWorkout, getSetting, setSetting, startWorkout } from './db'
-import type { Exercise, Prescription, ThemePreference, WorkoutDay } from './types'
+import type { Exercise, Prescription, ThemePreference, WorkoutDay, WorkoutSession } from './types'
 import { ExerciseCard } from './components/ExerciseCard'
 import { Onboarding } from './components/Onboarding'
 import { PwaPrompts } from './components/PwaPrompts'
@@ -21,7 +21,7 @@ function applyTheme(preference: ThemePreference) {
 
 export default function App() {
   const activeSheet = useLiveQuery(() => db.sheets.where('active').equals(1).first())
-  const days = useLiveQuery(() => activeSheet ? db.days.where('sheetId').equals(activeSheet.id).sortBy('dayIndex') : Promise.resolve([]), [activeSheet?.id]) ?? []
+  const days = useLiveQuery<WorkoutDay[]>(async () => activeSheet ? await db.days.where('sheetId').equals(activeSheet.id).sortBy('dayIndex') : [], [activeSheet?.id]) ?? []
   const [week, setWeek] = useState(1)
   const [selectedDayId, setSelectedDayId] = useState('')
   const [tab, setTab] = useState<Tab>('workout')
@@ -47,7 +47,7 @@ export default function App() {
   }, [activeSheet?.id])
   useEffect(() => { if (workoutDays.length && !workoutDays.some((day) => day.id === selectedDayId)) setSelectedDayId(workoutDays[0].id) }, [workoutDays, selectedDayId])
 
-  const exercises = useLiveQuery(() => selectedDay ? db.exercises.where('dayId').equals(selectedDay.id).sortBy('order') : Promise.resolve([]), [selectedDay?.id]) ?? []
+  const exercises = useLiveQuery<Exercise[]>(async () => selectedDay ? await db.exercises.where('dayId').equals(selectedDay.id).sortBy('order') : [], [selectedDay?.id]) ?? []
   const prescriptions = useLiveQuery(async () => {
     const result = new Map<string, Prescription>()
     for (const exercise of exercises) {
@@ -58,9 +58,9 @@ export default function App() {
   }, [exercises.map((e) => e.id).join(','), week]) ?? new Map<string, Prescription>()
 
   const maxWeek = useLiveQuery(async () => activeSheet ? Math.max(1, ...((await db.prescriptions.toArray()).filter((p) => exercises.some((e) => e.id === p.exerciseId)).map((p) => p.weekNumber))) : 1, [activeSheet?.id, exercises.map((e) => e.id).join(',')]) ?? 6
-  const activeSession = useLiveQuery(() => db.workoutSessions.where('active').equals(1).first())
-  const completedSessions = useLiveQuery(() => activeSheet ? db.workoutSessions.where('sheetId').equals(activeSheet.id).filter((s) => !s.active && s.endedAt > 0).reverse().sortBy('endedAt') : Promise.resolve([]), [activeSheet?.id]) ?? []
-  const daySessions = useLiveQuery(() => selectedDay ? db.workoutSessions.where('[dayId+weekNumber]').equals([selectedDay.id, week]).toArray() : Promise.resolve([]), [selectedDay?.id, week]) ?? []
+  const activeSession = useLiveQuery<WorkoutSession | undefined>(() => db.workoutSessions.where('active').equals(1).first())
+  const completedSessions = useLiveQuery<WorkoutSession[]>(async () => activeSheet ? await db.workoutSessions.where('sheetId').equals(activeSheet.id).filter((s) => !s.active && s.endedAt > 0).reverse().sortBy('endedAt') : [], [activeSheet?.id]) ?? []
+  const daySessions = useLiveQuery<WorkoutSession[]>(async () => selectedDay ? await db.workoutSessions.where('[dayId+weekNumber]').equals([selectedDay.id, week]).toArray() : [], [selectedDay?.id, week]) ?? []
   const dayClosed = daySessions.some((session) => !session.active && session.endedAt > 0)
   const sessionElsewhere = Boolean(activeSession && selectedDay && activeSession.dayId !== selectedDay.id)
 
@@ -193,7 +193,7 @@ function ProgressView() {
 }
 
 function MobilitySheet({ day, week, onClose }: { day: WorkoutDay; week: number; onClose: () => void }) {
-  const exercises = useLiveQuery(() => db.exercises.where('dayId').equals(day.id).sortBy('order'), [day.id]) ?? []
-  const prescriptions = useLiveQuery(async()=>Promise.all(exercises.map(async(e)=>db.prescriptions.where('[exerciseId+weekNumber]').equals([e.id,week]).first())),[exercises.map(e=>e.id).join(','),week]) ?? []
+  const exercises = useLiveQuery<Exercise[]>(() => db.exercises.where('dayId').equals(day.id).sortBy('order'), [day.id]) ?? []
+  const prescriptions = useLiveQuery<Array<Prescription | undefined>>(async()=>Promise.all(exercises.map(async(e)=>db.prescriptions.where('[exerciseId+weekNumber]').equals([e.id,week]).first())),[exercises.map(e=>e.id).join(','),week]) ?? []
   return <div className="sheet-backdrop" onMouseDown={(e)=>{if(e.currentTarget===e.target)onClose()}}><section className="bottom-sheet mobility-sheet"><div className="sheet-handle"/><div className="mobility-head"><div><span>MOBILITÀ</span><h2>Prima di iniziare</h2></div><button onClick={onClose}>×</button></div>{exercises.map((exercise,index)=><div className="mobility-row" key={exercise.id}><img src={imageForExercise(exercise.name,prescriptions[index]?.program??'',exercise.trainerNote)} alt="" onError={(e)=>{e.currentTarget.src='/icon.svg'}}/><div><strong>{exercise.name}</strong><span>{prescriptions[index]?.program??''}</span></div></div>)}</section></div>
 }

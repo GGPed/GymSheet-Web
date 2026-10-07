@@ -52,7 +52,7 @@ export async function migrateAndroidBackup(file: File): Promise<void> {
     parsed.prescriptions.push({ id: `${exerciseId}:${weekNumber}`, exerciseId, weekNumber, program: String(prescription.program ?? '') })
   }
 
-  await db.transaction('rw', db.sheets, db.days, db.exercises, db.prescriptions, db.setLogs, db.workoutSessions, db.sessionSets, async () => {
+  await db.transaction('rw', [db.sheets, db.days, db.exercises, db.prescriptions, db.setLogs, db.workoutSessions, db.sessionSets], async () => {
     await db.sheets.toCollection().modify({ active: 0 })
     await db.sheets.add(parsed.sheet)
     await db.days.bulkAdd(parsed.days)
