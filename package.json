@@ -12,6 +12,7 @@
   "dependencies": {
     "dexie": "^4.2.1",
     "dexie-react-hooks": "^1.1.7",
+    "jspdf": "^3.0.3",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "sql.js": "^1.13.0",

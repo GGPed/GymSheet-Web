@@ -7,6 +7,7 @@ import { Onboarding } from './components/Onboarding'
 import { PwaPrompts } from './components/PwaPrompts'
 import { SettingsSheet } from './components/SettingsSheet'
 import { exportWebBackup } from './services/backup'
+import { exportHistoryExcel, exportHistoryPdf } from './services/export'
 import { imageForExercise } from './services/images'
 import { useRecoveryTimer } from './hooks/useRecoveryTimer'
 import { formatDuration, setCountForProgram, toNumber } from './utils'
@@ -22,6 +23,7 @@ function applyTheme(preference: ThemePreference) {
 export default function App() {
   const activeSheet = useLiveQuery(() => db.sheets.where('active').equals(1).first())
   const days = useLiveQuery<WorkoutDay[]>(async () => activeSheet ? await db.days.where('sheetId').equals(activeSheet.id).sortBy('dayIndex') : [], [activeSheet?.id]) ?? []
+  const allDays = useLiveQuery<WorkoutDay[]>(() => db.days.toArray()) ?? []
   const [week, setWeek] = useState(1)
   const [selectedDayId, setSelectedDayId] = useState('')
   const [tab, setTab] = useState<Tab>('workout')
@@ -59,7 +61,8 @@ export default function App() {
 
   const maxWeek = useLiveQuery(async () => activeSheet ? Math.max(1, ...((await db.prescriptions.toArray()).filter((p) => exercises.some((e) => e.id === p.exerciseId)).map((p) => p.weekNumber))) : 1, [activeSheet?.id, exercises.map((e) => e.id).join(',')]) ?? 6
   const activeSession = useLiveQuery<WorkoutSession | undefined>(() => db.workoutSessions.where('active').equals(1).first())
-  const completedSessions = useLiveQuery<WorkoutSession[]>(async () => activeSheet ? await db.workoutSessions.where('sheetId').equals(activeSheet.id).filter((s) => !s.active && s.endedAt > 0).reverse().sortBy('endedAt') : [], [activeSheet?.id]) ?? []
+  const allCompletedSessions = useLiveQuery<WorkoutSession[]>(async () => (await db.workoutSessions.filter((s) => !s.active && s.endedAt > 0).toArray()).sort((a, b) => b.endedAt - a.endedAt)) ?? []
+  const completedSessions = activeSheet ? allCompletedSessions.filter((session) => session.sheetId === activeSheet.id) : []
   const daySessions = useLiveQuery<WorkoutSession[]>(async () => selectedDay ? await db.workoutSessions.where('[dayId+weekNumber]').equals([selectedDay.id, week]).toArray() : [], [selectedDay?.id, week]) ?? []
   const dayClosed = daySessions.some((session) => !session.active && session.endedAt > 0)
   const sessionElsewhere = Boolean(activeSession && selectedDay && activeSession.dayId !== selectedDay.id)
@@ -78,8 +81,9 @@ export default function App() {
 
   const workoutsSinceBackup = useLiveQuery(async () => getSetting('workoutsSinceBackup', 0)) ?? 0
   const lastBackupAt = useLiveQuery(async () => getSetting('lastBackupAt', 0)) ?? 0
-  const backupDue = workoutsSinceBackup >= 5 || (lastBackupAt > 0 && Date.now() - lastBackupAt >= 14 * 86400000)
-  const backupStrong = workoutsSinceBackup >= 10 || (lastBackupAt > 0 && Date.now() - lastBackupAt >= 28 * 86400000)
+  const backupBaseline = lastBackupAt || activeSheet.importedAt
+  const backupDue = workoutsSinceBackup >= 5 || Date.now() - backupBaseline >= 14 * 86400000
+  const backupStrong = workoutsSinceBackup >= 10 || Date.now() - backupBaseline >= 28 * 86400000
 
   if (activeSheet === undefined) return <div className="splash"><img src="/icon.svg" alt="" /><strong>GymSheet</strong></div>
   if (!activeSheet) return <><Onboarding /><PwaPrompts /></>
@@ -148,7 +152,7 @@ export default function App() {
       </div>
     </>}
 
-    {tab === 'history' && <HistoryView days={days} sessions={completedSessions} />}
+    {tab === 'history' && <HistoryView days={allDays} sessions={allCompletedSessions} />}
     {tab === 'progress' && <ProgressView />}
 
     <nav className="bottom-nav">
@@ -167,7 +171,7 @@ function HistoryView({ days, sessions }: { days: WorkoutDay[]; sessions: Array<{
   return <main className="page-view"><div className="page-title"><div><span>STORICO</span><h2>Allenamenti</h2></div><b>{sessions.length}</b></div>
     {!sessions.length ? <div className="empty-card"><strong>Nessun allenamento concluso</strong><span>Quando chiuderai un workout comparirà qui.</span></div> : sessions.map((session) => {
       const day = days.find((item) => item.id === session.dayId)
-      return <article className="history-card" key={session.id}><div><span>SETTIMANA {session.weekNumber}</span><h3>{day?.title ?? 'Allenamento'}</h3><small>{new Date(session.endedAt).toLocaleDateString('it-IT',{day:'2-digit',month:'short',year:'numeric'})}</small></div><div className="history-duration">{formatDuration(session.endedAt-session.startedAt)}<small>{session.completionMode==='early'?'anticipato':'completo'}</small></div></article>
+      return <article className="history-card" key={session.id}><div><span>SETTIMANA {session.weekNumber}</span><h3>{day?.title ?? 'Allenamento'}</h3><small>{new Date(session.endedAt).toLocaleDateString('it-IT',{day:'2-digit',month:'short',year:'numeric'})}</small></div><div className="history-side"><div className="history-duration">{formatDuration(session.endedAt-session.startedAt)}<small>{session.completionMode==='early'?'anticipato':'completo'}</small></div><div className="history-actions"><button onClick={()=>void exportHistoryPdf(session.id)}>PDF</button><button onClick={()=>void exportHistoryExcel(session.id)}>XLS</button></div></div></article>
     })}
   </main>
 }

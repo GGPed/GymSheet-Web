@@ -3,6 +3,7 @@ import { installParsedSheet, resetAllData, setSetting } from '../db'
 import type { ThemePreference } from '../types'
 import { migrateAndroidBackup } from '../services/androidBackup'
 import { exportWebBackup, restoreWebBackup } from '../services/backup'
+import { exportHistoryExcel, exportHistoryPdf } from '../services/export'
 import { parseExcelFile } from '../services/excel'
 
 interface Props { open: boolean; onClose: () => void; theme: ThemePreference; onTheme: (theme: ThemePreference) => void }
@@ -25,6 +26,8 @@ export function SettingsSheet({ open, onClose, theme, onTheme }: Props) {
       <input hidden ref={restore} type="file" accept=".gsw,application/json" onChange={(e)=>{const f=e.target.files?.[0];if(f)void restoreWebBackup(f).then(()=>location.reload())}} />
       <button className="menu-row" onClick={() => android.current?.click()}>A <span>Migra backup Android<small>Conversione una tantum del file .gsb</small></span>›</button>
       <input hidden ref={android} type="file" accept=".gsb,application/octet-stream" onChange={(e)=>{const f=e.target.files?.[0];if(f)void migrateAndroidBackup(f).then(onClose)}} />
+      <button className="menu-row" onClick={() => void exportHistoryPdf()}>PDF <span>Esporta storico in PDF<small>Tutti gli allenamenti conclusi</small></span>›</button>
+      <button className="menu-row" onClick={() => void exportHistoryExcel()}>XLS <span>Esporta storico in Excel<small>Riepilogo + dettaglio serie</small></span>›</button>
       <button className="menu-row danger" onClick={() => setReset(true)}>! <span>Cancella tutti i dati</span>›</button>
       {reset && <div className="danger-zone"><strong>Cancellazione definitiva</strong><p>Prima crea un backup. Poi scrivi <b>ELIMINA</b> per cancellare schede, storico e impostazioni.</p><button className="secondary" onClick={() => void exportWebBackup()}>Crea backup prima</button><input value={word} onChange={(e)=>setWord(e.target.value)} placeholder="Scrivi ELIMINA" /><button className="danger-button" disabled={word!=='ELIMINA'} onClick={() => void resetAllData().then(()=>location.reload())}>Cancella definitivamente</button></div>}
     </section>
