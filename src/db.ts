@@ -101,6 +101,22 @@ export async function updateSetLog(exerciseId: string, weekNumber: number, setNu
   return next
 }
 
+export async function findLastCompletedSet(dayId: string, weekNumber: number): Promise<SetLog | undefined> {
+  const exercises = await db.exercises.where('dayId').equals(dayId).toArray()
+  if (!exercises.length) return undefined
+  const ids = new Set(exercises.map((exercise) => exercise.id))
+  const logs = await db.setLogs.where('completed').equals(1).toArray()
+  return logs
+    .filter((log) => log.weekNumber === weekNumber && ids.has(log.exerciseId))
+    .sort((a, b) => b.updatedAt - a.updatedAt)[0]
+}
+
+export async function undoLastCompletedSet(dayId: string, weekNumber: number): Promise<SetLog | undefined> {
+  const latest = await findLastCompletedSet(dayId, weekNumber)
+  if (!latest) return undefined
+  return updateSetLog(latest.exerciseId, latest.weekNumber, latest.setNumber, { completed: 0 })
+}
+
 export async function resetAllData(): Promise<void> {
   await db.delete()
   await db.open()

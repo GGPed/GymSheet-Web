@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db, finishWorkout, getSetting, setSetting, startWorkout } from './db'
+import { db, findLastCompletedSet, finishWorkout, getSetting, setSetting, startWorkout, undoLastCompletedSet } from './db'
 import type { Exercise, Prescription, ThemePreference, WorkoutDay, WorkoutSession } from './types'
 import { ExerciseCard } from './components/ExerciseCard'
 import { Onboarding } from './components/Onboarding'
@@ -30,6 +30,7 @@ export default function App() {
   const [menu, setMenu] = useState(false)
   const [mobilityOpen, setMobilityOpen] = useState(false)
   const [theme, setTheme] = useState<ThemePreference>('system')
+  const [workoutNow, setWorkoutNow] = useState(Date.now())
   const touchX = useRef(0)
   const recovery = useRecoveryTimer()
 
@@ -66,6 +67,19 @@ export default function App() {
   const daySessions = useLiveQuery<WorkoutSession[]>(async () => selectedDay ? await db.workoutSessions.where('[dayId+weekNumber]').equals([selectedDay.id, week]).toArray() : [], [selectedDay?.id, week]) ?? []
   const dayClosed = daySessions.some((session) => !session.active && session.endedAt > 0)
   const sessionElsewhere = Boolean(activeSession && selectedDay && activeSession.dayId !== selectedDay.id)
+  const lastCompletedSet = useLiveQuery(async () => selectedDay ? await findLastCompletedSet(selectedDay.id, week) : undefined, [selectedDay?.id, week])
+
+  useEffect(() => {
+    setWorkoutNow(Date.now())
+    if (!activeSession) return
+    const timer = window.setInterval(() => setWorkoutNow(Date.now()), 1000)
+    const refresh = () => setWorkoutNow(Date.now())
+    document.addEventListener('visibilitychange', refresh)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', refresh)
+    }
+  }, [activeSession?.id])
 
   const progress = useLiveQuery(async () => {
     let done = 0, total = 0
@@ -101,6 +115,12 @@ export default function App() {
 
   const onCompletedSet = (exercise: Exercise) => {
     if (exercise.recoverySeconds > 0) void recovery.start(exercise.recoverySeconds, exercise.name)
+  }
+
+  const undoLast = async () => {
+    if (!selectedDay) return
+    const undone = await undoLastCompletedSet(selectedDay.id, week)
+    if (undone) await recovery.stop()
   }
 
   const finish = async () => {
@@ -141,13 +161,13 @@ export default function App() {
       {recovery.expired && !recovery.active && <button className="recovery-done" onClick={() => void recovery.stop()}>✓ Recupero terminato</button>}
 
       {selectedDay && <main className="exercise-list" onTouchStart={(e)=>{touchX.current=e.changedTouches[0].clientX}} onTouchEnd={(e)=>{const d=e.changedTouches[0].clientX-touchX.current;if(Math.abs(d)>65)moveDay(d<0?1:-1)}}>
-        {exercises.map((exercise) => <ExerciseCard key={exercise.id} exercise={exercise} prescription={prescriptions.get(exercise.id)} week={week} activeSession={activeSession} sessionElsewhere={sessionElsewhere} onCompletedSet={onCompletedSet} />)}
+        {exercises.map((exercise) => <ExerciseCard key={`${exercise.id}:${week}`} exercise={exercise} prescription={prescriptions.get(exercise.id)} week={week} activeSession={activeSession} sessionElsewhere={sessionElsewhere} onCompletedSet={onCompletedSet} />)}
       </main>}
 
       <div className="workout-dock">
         {activeSession && selectedDay && activeSession.dayId === selectedDay.id ? <>
-          <div className="dock-copy"><span>CONTINUA ALLENAMENTO</span><strong>{progress.done}/{progress.total} serie</strong><div className="progress-track"><i style={{width:`${progress.total?Math.min(100,progress.done/progress.total*100):0}%`}} /></div></div>
-          <button className="finish-button" onClick={() => void finish()}>{progress.total>0&&progress.done>=progress.total?'Concludi':'Concludi anticipatamente'}</button>
+          <div className="dock-copy"><span>ALLENAMENTO IN CORSO</span><div className="dock-meta"><strong>{progress.done}/{progress.total} serie</strong><span className="dock-timer">{formatDuration(workoutNow-activeSession.startedAt)}</span></div><div className="progress-track"><i style={{width:`${progress.total?Math.min(100,progress.done/progress.total*100):0}%`}} /></div></div>
+          <div className="dock-actions">{lastCompletedSet && <button className="undo-set" onClick={() => void undoLast()}>↶ Annulla serie</button>}<button className="finish-button" onClick={() => void finish()}>{progress.total>0&&progress.done>=progress.total?'Concludi':'Concludi anticipatamente'}</button></div>
         </> : dayClosed ? <div className="closed-workout"><b>✓ Allenamento completato</b><span>Puoi ancora consultare e modificare i dati registrati.</span></div> : sessionElsewhere ? <div className="closed-workout"><b>Allenamento già in corso</b><span>Concludi prima l’altro giorno.</span></div> : <button className="start-button" onClick={() => selectedDay && void startWorkout(activeSheet.id, selectedDay.id, week)}>Inizia allenamento →</button>}
       </div>
     </>}
@@ -199,5 +219,5 @@ function ProgressView() {
 function MobilitySheet({ day, week, onClose }: { day: WorkoutDay; week: number; onClose: () => void }) {
   const exercises = useLiveQuery<Exercise[]>(() => db.exercises.where('dayId').equals(day.id).sortBy('order'), [day.id]) ?? []
   const prescriptions = useLiveQuery<Array<Prescription | undefined>>(async()=>Promise.all(exercises.map(async(e)=>db.prescriptions.where('[exerciseId+weekNumber]').equals([e.id,week]).first())),[exercises.map(e=>e.id).join(','),week]) ?? []
-  return <div className="sheet-backdrop" onMouseDown={(e)=>{if(e.currentTarget===e.target)onClose()}}><section className="bottom-sheet mobility-sheet"><div className="sheet-handle"/><div className="mobility-head"><div><span>MOBILITÀ</span><h2>Prima di iniziare</h2></div><button onClick={onClose}>×</button></div>{exercises.map((exercise,index)=><div className="mobility-row" key={exercise.id}><img src={imageForExercise(exercise.name,prescriptions[index]?.program??'',exercise.trainerNote)} alt="" onError={(e)=>{e.currentTarget.src='/icon.svg'}}/><div><strong>{exercise.name}</strong><span>{prescriptions[index]?.program??''}</span></div></div>)}</section></div>
+  return <div className="sheet-backdrop" onMouseDown={(e)=>{if(e.currentTarget===e.target)onClose()}}><section className="bottom-sheet mobility-sheet"><div className="sheet-handle"/><div className="mobility-head"><div><span>MOBILITÀ</span><h2>Prima di iniziare</h2></div><button onClick={onClose}>×</button></div>{exercises.map((exercise,index)=><div className="mobility-row" key={exercise.id}><img src={imageForExercise(exercise.name,prescriptions[index]?.program??'',exercise.trainerNote)} alt="" onError={(e)=>{e.currentTarget.src='/icon-192.png'}}/><div><strong>{exercise.name}</strong><span>{prescriptions[index]?.program??''}</span></div></div>)}</section></div>
 }
