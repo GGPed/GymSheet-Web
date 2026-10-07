@@ -12,11 +12,11 @@
   "dependencies": {
     "dexie": "^4.2.1",
     "dexie-react-hooks": "^1.1.7",
-    "jspdf": "^3.0.3",
+    "jspdf": "^4.2.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "sql.js": "^1.13.0",
-    "xlsx": "^0.18.5"
+    "xlsx": "npm:@e965/xlsx@0.20.3"
   },
   "devDependencies": {
     "@types/react": "^19.1.16",
