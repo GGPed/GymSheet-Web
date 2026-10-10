@@ -6,8 +6,10 @@ export interface Sheet {
   id: string
   name: string
   importedAt: number
+  archivedAt?: number
   active: 0 | 1
   source: SheetSource
+  initialWeeks?: number
 }
 
 export interface WorkoutDay {

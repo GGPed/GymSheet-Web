@@ -1,0 +1,1 @@
+Import compatto; feedback backup sotto CTA unica; workout dinamici A-G; Ripetizioni nelle label ed export; salvataggio serie registrate con stato preservato e valori in sola lettura. Verificate persistenza, note, storico e progressi dopo riapertura.

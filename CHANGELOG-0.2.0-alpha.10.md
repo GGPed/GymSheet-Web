@@ -1,0 +1,1 @@
+Timer esercizio unico; modifica esplicita delle serie registrate; settimana su A; stato In corso; storico con nome scheda e conteggio; conclusione verde/rossa; CTA Progressi a destra. Streak globale verificata, dati e burger preservati.

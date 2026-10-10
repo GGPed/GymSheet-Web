@@ -1,0 +1,1 @@
+Superset: colonne esplicite Nome | Valore | Azione, target reps senza duplicazioni, nomi laterali compatti e massimo due righe, countdown e azione sempre sulla stessa riga. Nessuna modifica alla logica.

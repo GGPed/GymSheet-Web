@@ -1,0 +1,1 @@
+Righe addominali/superset orizzontali e compatte: nome e target, countdown/target reps, Avvia/input. Elementi laterali allineati; Carico preservato per i superset con pesi. Logiche e CTA finale invariate.

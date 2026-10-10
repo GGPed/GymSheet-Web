@@ -1,0 +1,1 @@
+Stato esplicito delle serie negli allenamenti conclusi: completata/non completata. Valori sempre in sola lettura con modifica tramite matita, anche nei superset. Nessuna modifica ai dati o allo stato registrato.

@@ -1,0 +1,1 @@
+Database ufficiale immagini: 1746 originali importati, 873 esercizi del catalogo indicizzati, alias espliciti italiani, mapping condiviso e foto alternative nel dettaglio. Vecchi asset e download automatico obsoleti rimossi; cache offline limitata alle immagini necessarie. Verificati hash, intero catalogo e tutte le schede Excel disponibili.

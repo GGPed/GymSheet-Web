@@ -1,26 +1,34 @@
 # GymSheet Web
 
-PWA mobile-first di GymSheet, ricostruita dalla versione Android 0.3.6.
+PWA mobile-first, senza account o backend. Dati e storico restano locali al browser/dispositivo.
 
-## Stack
+## Sviluppo e test locale
 
-React + TypeScript + Vite, Dexie/IndexedDB, SheetJS, sql.js e vite-plugin-pwa.
-
-## Sviluppo
-
-```bash
-npm install
+```sh
+npm ci
 npm run dev
 ```
 
-## Build
+Per il test smartphone compilare con `npm run build`, poi aprire `AVVIA-TELEFONO.cmd`.
+Lo script rileva automaticamente l’IPv4 e mostra l’URL `/GymSheet-Web/` sulla porta 5185.
 
-```bash
+## Build production
+
+```sh
 npm run build
+node scripts/check-pages-build.mjs
 ```
 
-La build scarica localmente le immagini esercizio usate dalla versione Android e le include negli asset PWA/offline.
+Le immagini ufficiali sono già in `public/exercises`; la build verifica i riferimenti senza scaricare o sostituire immagini.
+
+## Pubblicazione Alpha
+
+GitHub Pages: https://ggped.github.io/GymSheet-Web/
+
+Il workflow GitHub Actions è **solo manuale**: nessun push o PR pubblica automaticamente.
+Prima test locale, poi verifica, poi pubblicazione solo su richiesta esplicita. Vedere `DEPLOY.md`.
 
 ## Dati
 
-I dati restano nel browser/dispositivo. Sono supportati import Excel `.xlsx`/`.xls`, backup Web e migrazione una tantum dai backup Android `.gsb`.
+Import Excel `.xlsx`/`.xls` e backup/ripristino Web. IndexedDB e localStorage sono locali a ogni origine e dispositivo.
+Per trasferire dati dalla preview locale alla versione HTTPS usare un backup Web.

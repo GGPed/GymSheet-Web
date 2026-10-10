@@ -1,0 +1,1 @@
+Modifica inline delle serie registrate, con matita e Salva modifiche nella stessa card. Note post-workout inline. Persistenza condivisa con storico/progressi/export; nessuna modale, riapertura o recupero.
