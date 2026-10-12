@@ -11,7 +11,7 @@ import { db, updateSetLog } from '../db'
 import type { Exercise, Prescription, WorkoutSession } from '../types'
 import { imageForExercise } from '../services/images'
 import { displayProgram, trainingSetCount } from '../training'
-import { toNumber, targetForSet, readableRecovery } from '../utils'
+import { toNumber, targetForSet, readableRecovery, coachNoteForWeek } from '../utils'
 interface Props {
   exercise: Exercise
   prescription?: Prescription
@@ -80,7 +80,7 @@ export function ExerciseCard({ exercise, prescription, week, dayClosed, activeSe
     {!expanded&&<div className="completed-compact"><span>{setCount} serie completate · dettagli nascosti</span><button onClick={()=>setExpanded(true)}>Mostra</button></div>}
     {expanded && <>
       {legacy?.weight && <p className="legacy-weight">Carico annotato: {legacy.weight}</p>}
-      {exercise.trainerNote&&<CoachNote note={exercise.trainerNote}/>}
+      {coachNoteForWeek(exercise.trainerNote,week)&&<CoachNote note={coachNoteForWeek(exercise.trainerNote,week)}/>}
       <div className="series-heading"><span>SERIE</span><WorkoutControls>{week>1&&hasPrevious&&<button disabled={dayClosed||sessionElsewhere} onClick={()=>void copyPrevious().catch(e=>setOperationError(e instanceof Error?e.message:"Serie non modificate."))}>Copia precedente</button>}</WorkoutControls></div>
       <WorkoutControls className="sets">
         {Array.from({ length: setCount }, (_, index) => {

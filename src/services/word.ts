@@ -118,7 +118,7 @@ export function parseWordParagraphs(paragraphs: string[], filename: string): Par
     previous=exercise
   }
   const globalNote=globalLines.join('\n\n').trim().replace(/(\d)\s*([–—\-/])\s*(\d)/g,'$1$2$3')
-  for (const exercise of result.exercises) if (globalNote && !exercise.trainerNote.includes(globalNote)) exercise.trainerNote=[exercise.trainerNote,globalNote].filter(Boolean).join('\n\n')
+  if(globalNote)result.sheet.coachNotes=globalNote
   result.days.sort((a,b)=>a.dayIndex-b.dayIndex)
   if (!result.days.length || !result.exercises.length) throw new Error('Nessun workout riconosciuto. Usa intestazioni GIORNO 1…7 e prescrizioni serie x ripetizioni.')
   return result

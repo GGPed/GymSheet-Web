@@ -30,7 +30,7 @@ export async function parseExcelFile(file: File, worksheetName?: string): Promis
 
   const headers = rows
     .map((row, index) => ({ index, first: upper(row[0]) }))
-    .filter((row) => row.first.startsWith('FULL BODY'))
+    .filter((row) => row.first.startsWith('FULL BODY') || (rows[row.index].some(cell=>/^WEEK\s*\d+/i.test(clean(cell))) && rows[row.index].some(cell=>/^REC(?:UPERO)?$/i.test(clean(cell)))))
     .map((row) => row.index)
   if (!headers.length) return parseTabular(rows, file.name)
 
@@ -56,6 +56,8 @@ export async function parseExcelFile(file: File, worksheetName?: string): Promis
     const weekColumns = malformed ? rawWeeks.map((item, index) => ({ column: item.column, week: index + 1 })) : rawWeeks
     parsed.sheet.initialWeeks = Math.max(parsed.sheet.initialWeeks ?? 1, ...weekColumns.map(w=>w.week))
     const noteColumn = header.findIndex((cell) => upper(cell) === 'NOTE')
+    const loadColumn = header.findIndex(cell=>/^CARICO\b/i.test(clean(cell)))
+    const globalLines:string[]=[]
     let exerciseOrder = 0
     let previousExerciseId = ''
 
@@ -67,6 +69,11 @@ export async function parseExcelFile(file: File, worksheetName?: string): Promis
         continue
       }
       if (upper(name).startsWith('FULL BODY')) continue
+      // Standalone text has no exercise prescription/recovery/load: retain it
+      // once at sheet level rather than creating an extra workout exercise.
+      if(!weekColumns.some(({column})=>clean(row[column]))&&!clean(row[1])&&!(loadColumn>=0&&clean(row[loadColumn]))){
+        globalLines.push(name);continue
+      }
       exerciseOrder += 1
       const exerciseId = uid('exercise')
       previousExerciseId = exerciseId
@@ -75,7 +82,7 @@ export async function parseExcelFile(file: File, worksheetName?: string): Promis
       parsed.exercises.push({
         id: exerciseId, dayId, order: exerciseOrder, name: name.trim(),
         recoveryLabel: clean(row[1]), recoverySeconds: parseRecoverySeconds(clean(row[1])),
-        trainerNote: absProgram || clean(row[noteColumn >= 0 ? noteColumn : 9])
+        trainerNote: [absProgram || clean(row[noteColumn >= 0 ? noteColumn : 9]),loadColumn>=0&&/^RPE\s*\d+(?:[.,]\d+)?\s*$/i.test(clean(row[loadColumn]))?`Carico prima settimana: ${clean(row[loadColumn])}`:''].filter(Boolean).join('\n\n')
       })
       for (const { column, week } of weekColumns) {
         const program = absProgram || clean(row[column])
@@ -86,6 +93,7 @@ export async function parseExcelFile(file: File, worksheetName?: string): Promis
         for (let week = 1; week <= 6; week++) parsed.prescriptions.push({ id: `${exerciseId}:${week}`, exerciseId, weekNumber: week, program: absProgram })
       }
     }
+    if(globalLines.length)parsed.sheet.coachNotes=[parsed.sheet.coachNotes,...globalLines].filter(Boolean).join('\n\n')
   })
 
   const mobilityStart = rows.findIndex((row) => upper(row[0]).startsWith('ESERCIZI DI MOBILIT'))
@@ -121,6 +129,7 @@ function parseTabular(rows: unknown[][], filename: string): ParsedSheet {
   const column=(aliases:string[])=>header.findIndex(value=>aliases.includes(value))
   const exerciseColumn=column(['ESERCIZIO','EXERCISE']),dayColumn=column(['GIORNO','DAY','N'])
   const recoveryColumn=column(['REC','RECUPERO','RECOVERY']),noteColumn=column(['NOTE','NOTA','NOTE COACH'])
+  const loadColumn=header.findIndex(value=>/^CARICO\b/i.test(value))
   const weekColumn=column(['SETTIMANA','WEEK']),programColumn=column(['PROGRAMMA','PROGRAMMAZIONE','SERIE X RIPETIZIONI','TARGET','SVOLGIMENTO'])
   const setsColumn=column(['SERIE','SETS']),repsColumn=column(['RIPETIZIONI','REPS'])
   const sheetId=uid('sheet'),parsed:ParsedSheet={sheet:{id:sheetId,name:filename.replace(/\.(xlsx|xls)$/i,''),importedAt:Date.now(),active:1,source:'excel',initialWeeks:10},days:[],exercises:[],prescriptions:[]}
@@ -134,7 +143,7 @@ function parseTabular(rows: unknown[][], filename: string): ParsedSheet {
     if(!day){if(!/mobilit/i.test(title)&&parsed.days.filter(d=>!d.mobility).length>=7)throw new Error('La scheda può contenere al massimo 7 workout (A–G).');day={id:uid('day'),sheetId,dayIndex:parsed.days.length+1,title,mobility:/mobilit/i.test(title)?1:0};parsed.days.push(day)}
     let exercise=parsed.exercises.find(e=>e.dayId===day!.id&&e.name===name)
     if(!exercise){
-      const trainerNote=clean(row[noteColumn])
+      const trainerNote=[clean(row[noteColumn]),loadColumn>=0&&/^RPE\s*\d+(?:[.,]\d+)?\s*$/i.test(clean(row[loadColumn]))?`Carico prima settimana: ${clean(row[loadColumn])}`:''].filter(Boolean).join('\n\n')
       exercise={id:uid('exercise'),dayId:day.id,order:parsed.exercises.filter(e=>e.dayId===day!.id).length+1,name,recoveryLabel:clean(row[recoveryColumn]),recoverySeconds:parseRecoverySeconds(clean(row[recoveryColumn])),trainerNote};parsed.exercises.push(exercise)
     }
     const add=(week:number,program:string)=>{const id=`${exercise!.id}:${week}`;const existing=parsed.prescriptions.find(p=>p.id===id);if(existing&&existing.program!==program)throw new Error(`Due programmi diversi per ${name}, settimana ${week}.`);if(program&&!existing)parsed.prescriptions.push({id,exerciseId:exercise!.id,weekNumber:week,program})}

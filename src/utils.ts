@@ -68,3 +68,7 @@ export function readableRecovery(seconds:number):string {
 export function workoutLetter(day: WorkoutDay | undefined, index: number): string {
   return day?.label ?? String.fromCharCode(65 + Math.max(0,index))
 }
+
+export function coachNoteForWeek(note:string,week:number):string {
+  return week===1?note:note.split('\n').filter(line=>!/^\s*Carico prima settimana:\s*RPE(?=\s*\d)/i.test(line)).join('\n').trim()
+}

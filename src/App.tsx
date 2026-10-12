@@ -45,7 +45,6 @@ export default function App() {
   const back=()=>{setTab(previousTabs.at(-1)??'workout');setPreviousTabs(previous=>previous.slice(0,-1))}
   useEffect(()=>{if(tab==='workout'){const frame=requestAnimationFrame(()=>{if(workoutList.current)workoutList.current.scrollTop=workoutScroll.current});return()=>cancelAnimationFrame(frame)}},[tab])
   const [menu, setMenu] = useState(false)
-  const [mobilityOpen, setMobilityOpen] = useState(false)
   const [theme, setTheme] = useState<ThemePreference>('dark')
   const [workoutNow, setWorkoutNow] = useState(Date.now())
   const eventBusy = useRef(false)
@@ -56,7 +55,7 @@ export default function App() {
   const recovery = useRecoveryTimer()
 
   const workoutDays = useMemo(() => days.filter((day) => !day.mobility), [days])
-  const mobilityDay = days.find((day) => day.mobility)
+  const mobilityDays = days.filter((day) => day.mobility)
   const selectedDay = workoutDays.find((day) => day.id === selectedDayId) ?? workoutDays[0]
 
   useEffect(() => { void getSetting<ThemePreference>('theme', 'dark').then((value) => { const next=value==='system'?'dark':value; setTheme(next); applyTheme(next) }) }, [])
@@ -213,7 +212,8 @@ export default function App() {
         {activeSession&&sessionElsewhere&&recovery.active&&<button className="dock-recovery" onClick={()=>recovery.setExpanded(true)}>Recupero <strong>{formatDuration(recovery.remainingMs)}</strong></button>}
       </div>
       {selectedDay && <main ref={workoutList} className="exercise-list" onTouchStart={e=>{touchStart.current=(e.target as HTMLElement).closest('input,textarea,button,select')?null:{x:e.touches[0].clientX,y:e.touches[0].clientY}}} onTouchEnd={e=>{if(!touchStart.current)return;const dx=e.changedTouches[0].clientX-touchStart.current.x,dy=e.changedTouches[0].clientY-touchStart.current.y;touchStart.current=null;if(Math.abs(dx)>65&&Math.abs(dx)>Math.abs(dy)*1.5)moveDay(dx<0?1:-1)}}>
-        <div className="workout-day-heading"><div><span>SETTIMANA {week}</span></div>{mobilityDay && <button className="mobility-trigger" aria-haspopup="dialog" aria-expanded={mobilityOpen} onClick={()=>setMobilityOpen(true)}>Mobilità ⓘ</button>}</div>
+        <WarmupSection key={`${activeSheet.id}:${selectedDay.id}`} dayIds={mobilityDays.map(d=>d.id)} notes={activeSheet.coachNotes??''} week={week}/>
+        <div className="workout-day-heading"><div><span>SETTIMANA {week}</span></div></div>
         {exercises.map((exercise) => <ExerciseCard key={`${exercise.id}:${week}`} exercise={exercise} prescription={prescriptions.get(exercise.id)} week={week} dayClosed={dayClosed} activeSession={activeSession} sessionElsewhere={sessionElsewhere} onCompletedSet={onCompletedSet} />)}
       </main>}
 
@@ -224,7 +224,6 @@ export default function App() {
     <ProgressPage key={activeSheet.id} sheetId={activeSheet.id} active={tab==='progress'} onBack={back}/>
 
 
-    {mobilityOpen && mobilityDay && <MobilitySheet day={mobilityDay} week={week} onClose={()=>setMobilityOpen(false)} />}
     <SettingsSheet onHistory={()=>{navigate('history');setMenu(false)}} open={menu} onClose={()=>setMenu(false)} />
     {summary&&<SwipeDialog onClose={()=>setSummary(null)} title={summary.early?'Allenamento concluso anticipatamente':'Allenamento completato'} className="workout-summary"><p>{summary.early?'CONCLUSIONE ANTICIPATA':'SESSIONE COMPLETATA'} · {summary.day}</p><p>{summary.done}/{summary.total} serie completate</p><div className="summary-duration"><span>Durata</span><strong>{summary.duration}</strong></div><p>{summary.days}/{workoutDays.length} allenamenti completati questa settimana</p><p>Streak: {summary.streak} allenamenti completati</p>{summary.changes.map(change=><div className="summary-change" key={change.name}><b>{change.name}</b>{change.load&&<p>Carico: {change.load}</p>}{change.reps&&<p>Ripetizioni: {change.reps}</p>}{change.coach&&<p>✓ Obiettivo coach +KG raggiunto</p>}</div>)}</SwipeDialog>}
 
@@ -250,13 +249,18 @@ function HistoryView({ days, sessions, active, onBack }: { active:boolean; onBac
   </main>
 }
 
-function MobilitySheet({ day, week, onClose }: { day: WorkoutDay; week: number; onClose: () => void }) {
-  const exercises = useLiveQuery<Exercise[]>(() => db.exercises.where('dayId').equals(day.id).sortBy('order'), [day.id]) ?? []
+function WarmupSection({ dayIds, notes, week }: { dayIds:string[]; notes:string; week:number }) {
+  const [expanded,setExpanded]=useState(true)
+  const exercises = useLiveQuery<Exercise[]>(() => db.exercises.where('dayId').anyOf(dayIds).sortBy('order'), [dayIds.join(',')]) ?? []
   const prescriptions = useLiveQuery<Array<Prescription | undefined>>(async()=>Promise.all(exercises.map(async(e)=>effectivePrescription(await db.prescriptions.where('exerciseId').equals(e.id).toArray(),week))),[exercises.map(e=>e.id).join(','),week]) ?? []
   const [image,setImage]=useState<{exercise:Exercise;program:string}|null>(null)
-  return <><SwipeDialog title="Mobilità · Prima di iniziare" onClose={onClose}>
+  return <><details className="warmup-section" open={expanded} onToggle={e=>setExpanded(e.currentTarget.open)}><summary>Riscaldamento &amp; indicazioni coach<span aria-hidden="true">{expanded?'−':'+'}</span></summary>
+    <p className="warmup-subtitle">Promemoria prima, durante e dopo l’allenamento</p>
+    {exercises.length>0&&<h3>Riscaldamento / Mobilità</h3>}
     <div className="mobility-tooltip-list">{exercises.map((exercise,index)=><div className="mobility-row" key={exercise.id}><button className="exercise-image-button" aria-label={`Apri immagine ${exercise.name}`} onClick={()=>setImage({exercise,program:prescriptions[index]?.program??''})}><img src={imageForExercise(exercise.name,prescriptions[index]?.program??'',exercise.trainerNote)} alt={exercise.name} onError={(e)=>{e.currentTarget.onerror=null;e.currentTarget.src=`${import.meta.env.BASE_URL}icon-192.png`}}/></button><div><strong>{exercise.name}</strong><span>{prescriptions[index]?.program??''}</span></div></div>)}</div>
-  </SwipeDialog>{image&&<ExerciseImagePopup exercise={image.exercise} program={image.program} onClose={()=>setImage(null)}/>}</>
+    {notes&&<><h3>Indicazioni coach</h3><p className="warmup-coach-text">{notes}</p></>}
+    {!exercises.length&&!notes&&<p className="muted">Nessuna indicazione generale presente nella scheda.</p>}
+  </details>{image&&<ExerciseImagePopup exercise={image.exercise} program={image.program} onClose={()=>setImage(null)}/>}</>
 }
 
 function StreakBox({value}:{value:number}){const message=streakMessage(value);return <section className="streak-box" aria-label="Streak allenamenti"><strong>{value} allenamenti di streak</strong>{message&&<p>{message}</p>}</section>}

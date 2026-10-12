@@ -4,6 +4,7 @@ export type SheetSource = 'excel' | 'word' | 'android' | 'web-backup'
 export type CompletionMode = 'complete' | 'early'
 
 export interface Sheet {
+  coachNotes?: string
   id: string
   name: string
   importedAt: number
