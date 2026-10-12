@@ -1,3 +1,4 @@
+import type { WorkoutDay } from './types'
 export const uid = (prefix: string) => `${prefix}_${typeof crypto.randomUUID==='function'?crypto.randomUUID():Array.from(crypto.getRandomValues(new Uint8Array(16)),n=>n.toString(16).padStart(2,'0')).join('')}`
 
 export function parseRecoverySeconds(label: string): number {
@@ -62,4 +63,8 @@ export function readableRecovery(seconds:number):string {
   if(minutes)parts.push(`${minutes} ${minutes===1?'minuto':'minuti'}`)
   if(rest||!minutes)parts.push(`${rest} ${rest===1?'secondo':'secondi'}`)
   return parts.join(' e ')
+}
+
+export function workoutLetter(day: WorkoutDay | undefined, index: number): string {
+  return day?.label ?? String.fromCharCode(65 + Math.max(0,index))
 }

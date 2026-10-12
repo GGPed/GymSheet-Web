@@ -1,4 +1,5 @@
 import {InlineSetEditor} from './InlineSetEditor'
+import {CoachNote} from './CoachNote'
 import {InlineExerciseNote} from './InlineExerciseNote'
 import {supersetParts} from '../superset'
 import {SupersetSet} from './SupersetSet'
@@ -30,13 +31,13 @@ export function ExerciseCard({ exercise, prescription, week, dayClosed, activeSe
   const logs = useLiveQuery(() => db.setLogs.where('[exerciseId+weekNumber]').equals([exercise.id, week]).sortBy('setNumber'), [exercise.id, week]) ?? []
   const previousLogs = useLiveQuery(async () => week > 1 ? await db.setLogs.where('[exerciseId+weekNumber]').equals([exercise.id, week - 1]).sortBy('setNumber') : [], [exercise.id, week]) ?? []
   const setCount = trainingSetCount(prescription?.program ?? '', logs)
-  const components=supersetParts(prescription?.program??'',exercise.name)
+  const components=exercise.components??supersetParts(prescription?.program??'',exercise.name)
   const allDone = Array.from({length:setCount},(_,i)=>i+1).every(n=>logs.some(log=>log.setNumber===n&&log.completed))
   const canTrain = Boolean(activeSession && activeSession.dayId === exercise.dayId && activeSession.weekNumber === week) && !sessionElsewhere
+  const canPrepareLoad=!dayClosed&&!activeSession&&!sessionElsewhere
   const hasPrevious = previousLogs.some((log) => log.weight || log.reps)
   const [imageOpen,setImageOpen] = useState(false)
   const [noteOpen,setNoteOpen] = useState(false)
-  const [coachExpanded,setCoachExpanded] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const noteKey = `exerciseNote:${exercise.id}:${week}`
   const savedNote = useLiveQuery(() => db.settings.get(noteKey), [noteKey])
@@ -79,7 +80,7 @@ export function ExerciseCard({ exercise, prescription, week, dayClosed, activeSe
     {!expanded&&<div className="completed-compact"><span>{setCount} serie completate · dettagli nascosti</span><button onClick={()=>setExpanded(true)}>Mostra</button></div>}
     {expanded && <>
       {legacy?.weight && <p className="legacy-weight">Carico annotato: {legacy.weight}</p>}
-      {exercise.trainerNote&&<div className="android-coach"><strong>Nota coach</strong><p className={coachExpanded?'':'clamped'}>{exercise.trainerNote}</p>{exercise.trainerNote.length>95&&<button onClick={()=>setCoachExpanded(v=>!v)}>{coachExpanded?'Riduci':'Mostra tutto'}</button>}</div>}
+      {exercise.trainerNote&&<CoachNote note={exercise.trainerNote}/>}
       <div className="series-heading"><span>SERIE</span><WorkoutControls>{week>1&&hasPrevious&&<button disabled={dayClosed||sessionElsewhere} onClick={()=>void copyPrevious().catch(e=>setOperationError(e instanceof Error?e.message:"Serie non modificate."))}>Copia precedente</button>}</WorkoutControls></div>
       <WorkoutControls className="sets">
         {Array.from({ length: setCount }, (_, index) => {
@@ -88,12 +89,12 @@ export function ExerciseCard({ exercise, prescription, week, dayClosed, activeSe
           const previous = previousLogs.find((item) => item.setNumber === setNumber)
           const previousDone = setNumber === 1 || Boolean(logs.find((item) => item.setNumber === setNumber - 1)?.completed)
           const enabled = canTrain && previousDone
-          if(components.length)return <SupersetSet key={setNumber} exerciseId={exercise.id} week={week} setNumber={setNumber} parts={components} log={log} enabled={enabled} dayClosed={dayClosed} editable={Boolean(log&&(log.completed||dayClosed))} onComplete={()=>completeSet(setNumber)}/>
+          if(components.length)return <SupersetSet canPrepareLoad={canPrepareLoad} completionLabel={exercise.components?.length===1?'Completa serie':undefined} key={setNumber} exerciseId={exercise.id} week={week} setNumber={setNumber} parts={components} log={log} enabled={enabled} dayClosed={dayClosed} editable={Boolean(log&&(log.completed||dayClosed))} onComplete={()=>completeSet(setNumber)}/>
           return <div className={`set-row ${log?.completed ? 'done' : ''}`} key={setNumber}>
             {dayClosed&&<span className={`set-status-label ${log?.completed?"completed":"incomplete"}`}>{log?.completed?"✓ Serie completata":"Serie non completata"}</span>}
             <div className="set-number">Serie {setNumber}{targetForSet(prescription?.program??'',setNumber)&&<small className="series-target"> · {targetForSet(prescription?.program??'',setNumber)}</small>}</div>
             {log&&(log.completed||dayClosed)?<InlineSetEditor log={log}/>:<>
-            <label className="input-with-previous"><span>CARICO</span>{log?.completed||dayClosed?<output className="saved-set-value">{log?.weight?`${log.weight} kg`:"—"}</output>:<input inputMode="decimal" value={log?.weight ?? ''} disabled={!enabled || dayClosed} onChange={(e) => void changeSet(setNumber, { weight: e.target.value })} />}<small>{week > 1 ? `prec ${previous?.weight || '—'}${previous?.weight ? ' kg' : ''}` : ' '}</small></label>
+            <label className="input-with-previous"><span>CARICO</span>{log?.completed||dayClosed?<output className="saved-set-value">{log?.weight?`${log.weight} kg`:"—"}</output>:<input inputMode="decimal" value={log?.weight ?? ''} disabled={(!enabled&&!canPrepareLoad) || dayClosed} onChange={(e) => void changeSet(setNumber, { weight: e.target.value })} />}<small>{week > 1 ? `prec ${previous?.weight || '—'}${previous?.weight ? ' kg' : ''}` : ' '}</small></label>
             <label className="input-with-previous"><span>Ripetizioni</span>{log?.completed||dayClosed?<output className="saved-set-value">{log?.reps||"—"}</output>:<input inputMode="numeric" value={log?.reps ?? ''} disabled={!enabled || dayClosed} onChange={(e) => void changeSet(setNumber, { reps: e.target.value })} />}<small>{week > 1 ? `prec ${previous?.reps || '—'}` : ' '}</small></label>
             <button className={`complete-set ${log?.completed ? 'done' : ''}`} disabled={Boolean(log?.completed) || (!enabled && !log?.completed) || (!log?.completed && (!log?.weight.trim() || !log?.reps.trim()))} onClick={async () => {
               if (log?.completed || completing.current.has(setNumber)) return

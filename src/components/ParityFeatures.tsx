@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { activateSheet, db, setSetting } from '../db'
+import { activateSheet, db, saveExerciseNote } from '../db'
 import type { Exercise } from '../types'
 import { imagesForExercise } from '../services/images'
 import { SwipeDialog } from './SwipeDialog'
-import { WorkoutControls } from './RecoveryWorkoutLock'
 import { toNumber } from '../utils'
 
 export function SheetArchive({ onClose, onError }: {onClose:()=>void;onError:(error:unknown)=>void}) {
@@ -42,8 +41,8 @@ export function ExerciseImagePopup({exercise,program,onClose}:{exercise:Exercise
 }
 export function ExerciseNotePopup({exercise,week,onClose}:{exercise:Exercise;week:number;onClose:()=>void}) {
   const key=`exerciseNote:${exercise.id}:${week}`
-  const [note,setNote]=useState(''),[error,setError]=useState('')
-  useEffect(()=>{void db.settings.get(key).then(value=>setNote((value?.value as {note?:string})?.note??''))},[key])
-  const save=async()=>{try{const existing=(await db.settings.get(key))?.value as object|undefined;await setSetting(key,{...existing,note,updatedAt:Date.now()});onClose()}catch{setError('Nota non salvata. Riprova.')}}
-  return <SwipeDialog title={`Nota · ${exercise.name}`} onClose={onClose}><WorkoutControls><label className="exercise-note">Settimana {week}<textarea autoFocus value={note} onChange={e=>setNote(e.target.value)}/></label>{error&&<p role="alert">{error}</p>}<button className="primary" onClick={()=>void save()}>Salva</button></WorkoutControls></SwipeDialog>
+  const [note,setNote]=useState(''),[error,setError]=useState(''),[ready,setReady]=useState(false),[saving,setSaving]=useState(false)
+  useEffect(()=>{let cancelled=false;setReady(false);void db.settings.get(key).then(value=>{if(!cancelled){setNote((value?.value as {note?:string})?.note??'');setReady(true)}}).catch(()=>{if(!cancelled)setError('Nota non caricata. Chiudi e riprova.')});return()=>{cancelled=true}},[key])
+  const save=async()=>{if(!ready||saving)return;setSaving(true);setError('');try{await saveExerciseNote(exercise.id,week,note);onClose()}catch{setError('Nota non salvata. Riprova.')}finally{setSaving(false)}}
+  return <SwipeDialog title={`Nota · ${exercise.name}`} onClose={onClose} className="exercise-note-modal"><label className="exercise-note">Settimana {week}<textarea aria-label={`Nota ${exercise.name}`} rows={4} disabled={!ready||saving} value={note} onChange={e=>setNote(e.target.value)}/></label>{error&&<p role="alert">{error}</p>}<button className="primary" disabled={!ready||saving} onClick={()=>void save()}>{saving?'Salvataggio…':'Salva'}</button></SwipeDialog>
 }

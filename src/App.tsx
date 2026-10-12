@@ -1,6 +1,7 @@
+import { BackButton } from './components/BackButton'
 import { ExerciseImagePopup } from './components/ParityFeatures'
 import { streakMessage } from './streakMessage'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, completeWorkoutSet, findLastCompletedSet, finishWorkout, getSetting, setSetting, startWorkout, undoLastCompletedSet } from './db'
 import type { Exercise, Prescription, ThemePreference, WorkoutDay, WorkoutSession } from './types'
@@ -15,7 +16,7 @@ import { useRecoveryTimer } from './hooks/useRecoveryTimer'
 import { RecoveryPanel } from './components/RecoveryPanel'
 import { RecoveryWorkoutLock, WorkoutControls } from './components/RecoveryWorkoutLock'
 import { effectivePrescription, trainingSetCount, recoveryAfterSet } from './training'
-import { formatDuration } from './utils'
+import { formatDuration, workoutLetter } from './utils'
 import { ProgressPage } from './components/ProgressPage'
 import { SwipeDialog } from './components/SwipeDialog'
 import { availableWeeks, addWeek } from './weeks'
@@ -38,6 +39,11 @@ export default function App() {
   const [week, setWeek] = useState(1)
   const [selectedDayId, setSelectedDayId] = useState('')
   const [tab, setTab] = useState<Tab>('workout')
+  const [previousTabs,setPreviousTabs]=useState<Tab[]>([])
+  const workoutScroll=useRef(0),workoutList=useRef<HTMLElement>(null)
+  const navigate=(next:Tab)=>{if(next===tab)return;if(tab==='workout')workoutScroll.current=workoutList.current?.scrollTop??0;setPreviousTabs(previous=>[...previous,tab]);setTab(next)}
+  const back=()=>{setTab(previousTabs.at(-1)??'workout');setPreviousTabs(previous=>previous.slice(0,-1))}
+  useEffect(()=>{if(tab==='workout'){const frame=requestAnimationFrame(()=>{if(workoutList.current)workoutList.current.scrollTop=workoutScroll.current});return()=>cancelAnimationFrame(frame)}},[tab])
   const [menu, setMenu] = useState(false)
   const [mobilityOpen, setMobilityOpen] = useState(false)
   const [theme, setTheme] = useState<ThemePreference>('dark')
@@ -165,14 +171,14 @@ export default function App() {
     const data=await progressData(activeSheet.id)
     const sessions=await db.workoutSessions.toArray()
     haptic('finish')
-    setSummary({day:String.fromCharCode(65+workoutDays.indexOf(selectedDay)),done:progress.done,total:progress.total,duration:formatDuration(Date.now()-activeSession.startedAt),days:completedWeekDays+(dayClosed?0:1),early:mode==='early',streak:workoutStreak(sessions,allDays),changes:improvements(data,activeSession.id)})
+    setSummary({day:workoutLetter(selectedDay,workoutDays.indexOf(selectedDay)),done:progress.done,total:progress.total,duration:formatDuration(Date.now()-activeSession.startedAt),days:completedWeekDays+(dayClosed?0:1),early:mode==='early',streak:workoutStreak(sessions,allDays),changes:improvements(data,activeSession.id)})
     } finally {eventBusy.current=false}
   }
 
   return <RecoveryWorkoutLock.Provider value={recovery.active || !recovery.ready}><div className={`app-shell ${activeSession?"has-active-workout":""}`}>
     <header className="app-header">
       <div className="header-title"><h1>{activeSheet.name}</h1></div>
-      <div className="header-actions"><button className="icon-button" aria-label="Home" onClick={()=>setTab('workout')}><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M3 11l9-8 9 8M5 9v12h5v-7h4v7h5V9"/></svg></button><button className="icon-button" aria-label={theme==='dark'?'Tema scuro · passa a Chiaro':'Tema chiaro · passa a Scuro'} title={theme==='dark'?'Passa al tema chiaro':'Passa al tema scuro'} onClick={()=>{const next=theme==='dark'?'light':'dark';setTheme(next);applyTheme(next);void setSetting('theme',next)}}><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{theme==='dark'?<path d="M20.5 13a8.5 8.5 0 0 1-9.5-9.5A8.5 8.5 0 1 0 20.5 13Z"/>:<><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></>}</svg></button><button className="icon-button" aria-label="Progressi" onClick={()=>setTab('progress')}><svg viewBox="0 0 24 24" width="23" height="23" aria-hidden="true"><path d="M4 4v16h16M7 15l4-5 4 2 5-6" fill="none" stroke="currentColor" strokeWidth="2"/></svg></button><button className="icon-button" aria-label="Menu" onClick={() => setMenu(true)}><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button></div>
+      <div className="header-actions"><button className="icon-button" aria-label="Home" onClick={()=>{setPreviousTabs([]);setTab('workout')}}><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M3 11l9-8 9 8M5 9v12h5v-7h4v7h5V9"/></svg></button><button className="icon-button" aria-label={theme==='dark'?'Tema scuro · passa a Chiaro':'Tema chiaro · passa a Scuro'} title={theme==='dark'?'Passa al tema chiaro':'Passa al tema scuro'} onClick={()=>{const next=theme==='dark'?'light':'dark';setTheme(next);applyTheme(next);void setSetting('theme',next)}}><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{theme==='dark'?<path d="M20.5 13a8.5 8.5 0 0 1-9.5-9.5A8.5 8.5 0 1 0 20.5 13Z"/>:<><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></>}</svg></button><button className="icon-button" aria-label="Progressi" onClick={()=>navigate('progress')}><svg viewBox="0 0 24 24" width="23" height="23" aria-hidden="true"><path d="M4 4v16h16M7 15l4-5 4 2 5-6" fill="none" stroke="currentColor" strokeWidth="2"/></svg></button><button className="icon-button" aria-label="Menu" onClick={() => setMenu(true)}><svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button></div>
       
     </header>
 
@@ -189,7 +195,7 @@ export default function App() {
         {workoutDays.map((day) => {
           const completed = completedSessions.some((s) => s.dayId === day.id && s.weekNumber === week)
           const selected = selectedDay?.id === day.id
-          return <button key={day.id} aria-pressed={selected} className={`day-chip ${selected?'selected':''} ${completed?'completed':''}`} onClick={() => setSelectedDayId(day.id)}><span className="day-chip-title">{completed&&<span className="day-completion-check" aria-label="Completato">✓</span>}{String.fromCharCode(65+workoutDays.indexOf(day))}</span><small className="day-session-status" aria-hidden="true"> </small></button>
+          return <button key={day.id} aria-pressed={selected} className={`day-chip ${selected?'selected':''} ${completed?'completed':''}`} onClick={() => setSelectedDayId(day.id)}><span className="day-chip-title">{completed&&<span className="day-completion-check" aria-label="Completato">✓</span>}{workoutLetter(day,workoutDays.indexOf(day))}</span><small className="day-session-status" aria-hidden="true"> </small></button>
         })}
       </div>
 
@@ -201,12 +207,12 @@ export default function App() {
 
       <div className="workout-dock">
         {activeSession && selectedDay && activeSession.dayId === selectedDay.id && activeSession.weekNumber === week ? <>
-          <div className="dock-copy"><span>ALLENAMENTO IN CORSO · SCHEDA {String.fromCharCode(65+workoutDays.findIndex(day=>day.id===activeSession.dayId))}</span><strong className="next-pending">{progress.next}</strong><div className="dock-meta"><strong>{progress.done}/{progress.total} · {progress.total?Math.min(100,Math.round(progress.done/progress.total*100)):0}%</strong><span className="dock-timer">{formatDuration(workoutNow-activeSession.startedAt)}</span></div>{recovery.active&&<button className="dock-recovery" onClick={()=>recovery.setExpanded(true)} aria-label="Apri timer recupero">Recupero <strong>{formatDuration(recovery.remainingMs)}</strong></button>}<div className="progress-track"><i style={{width:`${progress.total?Math.min(100,progress.done/progress.total*100):0}%`}} /></div></div>
+          <div className="dock-copy"><span>ALLENAMENTO IN CORSO · SCHEDA {workoutLetter(workoutDays.find(day=>day.id===activeSession.dayId),workoutDays.findIndex(day=>day.id===activeSession.dayId))}</span><strong className="next-pending">{progress.next}</strong><div className="dock-meta"><strong>{progress.done}/{progress.total} · {progress.total?Math.min(100,Math.round(progress.done/progress.total*100)):0}%</strong><span className="dock-timer">{formatDuration(workoutNow-activeSession.startedAt)}</span></div>{recovery.active&&<button className="dock-recovery" onClick={()=>recovery.setExpanded(true)} aria-label="Apri timer recupero">Recupero <strong>{formatDuration(recovery.remainingMs)}</strong></button>}<div className="progress-track"><i style={{width:`${progress.total?Math.min(100,progress.done/progress.total*100):0}%`}} /></div></div>
           <WorkoutControls className="dock-actions">{lastCompletedSet && <button className="undo-set" onClick={() => void undoLast().catch(e=>setActionError(e instanceof Error?e.message:"Serie non annullata."))}>↶ Annulla serie</button>}<button className={`finish-button ${progress.total>0&&progress.done>=progress.total?'success':'danger'}`} onClick={() => void finish().catch(e=>setActionError(e instanceof Error?e.message:"Allenamento non concluso."))}>{progress.total>0&&progress.done>=progress.total?'Concludi allenamento':'Concludi anticipatamente'}</button></WorkoutControls>
-        </> : dayClosed ? <div className="closed-workout"><b>✓ Allenamento completato</b><span>Puoi ancora consultare e modificare i dati registrati.</span></div> : sessionElsewhere ? <div className="closed-workout"><b>ALLENAMENTO IN CORSO · SCHEDA {String.fromCharCode(65+workoutDays.findIndex(day=>day.id===activeSession?.dayId))}</b><span>Torna al giorno e alla settimana dell’allenamento in corso.</span><button className="secondary" onClick={()=>{if(activeSession){setWeek(activeSession.weekNumber);setSelectedDayId(activeSession.dayId);void setSetting(`week:${activeSheet.id}`,activeSession.weekNumber)}}}>Torna all’allenamento</button></div> : <button className="start-button" disabled={recovery.active || !recovery.ready} onClick={() => void beginWorkout().catch(e=>setActionError(e instanceof Error?e.message:"Allenamento non avviato."))}>Inizia allenamento</button>}
+        </> : dayClosed ? <div className="closed-workout"><b>✓ Allenamento completato</b><span>Puoi ancora consultare e modificare i dati registrati.</span></div> : sessionElsewhere ? <div className="closed-workout"><b>ALLENAMENTO IN CORSO · SCHEDA {workoutLetter(workoutDays.find(day=>day.id===activeSession?.dayId),workoutDays.findIndex(day=>day.id===activeSession?.dayId))}</b><span>Torna al giorno e alla settimana dell’allenamento in corso.</span><button className="secondary" onClick={()=>{if(activeSession){setWeek(activeSession.weekNumber);setSelectedDayId(activeSession.dayId);void setSetting(`week:${activeSheet.id}`,activeSession.weekNumber)}}}>Torna all’allenamento</button></div> : <button className="start-button" disabled={recovery.active || !recovery.ready} onClick={() => void beginWorkout().catch(e=>setActionError(e instanceof Error?e.message:"Allenamento non avviato."))}>Inizia allenamento</button>}
         {activeSession&&sessionElsewhere&&recovery.active&&<button className="dock-recovery" onClick={()=>recovery.setExpanded(true)}>Recupero <strong>{formatDuration(recovery.remainingMs)}</strong></button>}
       </div>
-      {selectedDay && <main className="exercise-list" onTouchStart={e=>{touchStart.current=(e.target as HTMLElement).closest('input,textarea,button,select')?null:{x:e.touches[0].clientX,y:e.touches[0].clientY}}} onTouchEnd={e=>{if(!touchStart.current)return;const dx=e.changedTouches[0].clientX-touchStart.current.x,dy=e.changedTouches[0].clientY-touchStart.current.y;touchStart.current=null;if(Math.abs(dx)>65&&Math.abs(dx)>Math.abs(dy)*1.5)moveDay(dx<0?1:-1)}}>
+      {selectedDay && <main ref={workoutList} className="exercise-list" onTouchStart={e=>{touchStart.current=(e.target as HTMLElement).closest('input,textarea,button,select')?null:{x:e.touches[0].clientX,y:e.touches[0].clientY}}} onTouchEnd={e=>{if(!touchStart.current)return;const dx=e.changedTouches[0].clientX-touchStart.current.x,dy=e.changedTouches[0].clientY-touchStart.current.y;touchStart.current=null;if(Math.abs(dx)>65&&Math.abs(dx)>Math.abs(dy)*1.5)moveDay(dx<0?1:-1)}}>
         <div className="workout-day-heading"><div><span>SETTIMANA {week}</span></div>{mobilityDay && <button className="mobility-trigger" aria-haspopup="dialog" aria-expanded={mobilityOpen} onClick={()=>setMobilityOpen(true)}>Mobilità ⓘ</button>}</div>
         {exercises.map((exercise) => <ExerciseCard key={`${exercise.id}:${week}`} exercise={exercise} prescription={prescriptions.get(exercise.id)} week={week} dayClosed={dayClosed} activeSession={activeSession} sessionElsewhere={sessionElsewhere} onCompletedSet={onCompletedSet} />)}
       </main>}
@@ -214,13 +220,12 @@ export default function App() {
 
     </>}
 
-    {tab === 'history' && <HistoryView days={allDays} sessions={allCompletedSessions} />}
-    {tab === 'progress' && <ProgressPage sheetId={activeSheet.id} />}
+    <HistoryView days={allDays} sessions={allCompletedSessions} active={tab==='history'} onBack={back}/>
+    <ProgressPage key={activeSheet.id} sheetId={activeSheet.id} active={tab==='progress'} onBack={back}/>
 
-    {tab === 'history' && <button className="return-workout" onClick={()=>setTab('workout')}>Torna alla scheda</button>}
 
     {mobilityOpen && mobilityDay && <MobilitySheet day={mobilityDay} week={week} onClose={()=>setMobilityOpen(false)} />}
-    <SettingsSheet onHistory={()=>{setTab('history');setMenu(false)}} open={menu} onClose={()=>setMenu(false)} />
+    <SettingsSheet onHistory={()=>{navigate('history');setMenu(false)}} open={menu} onClose={()=>setMenu(false)} />
     {summary&&<SwipeDialog onClose={()=>setSummary(null)} title={summary.early?'Allenamento concluso anticipatamente':'Allenamento completato'} className="workout-summary"><p>{summary.early?'CONCLUSIONE ANTICIPATA':'SESSIONE COMPLETATA'} · {summary.day}</p><p>{summary.done}/{summary.total} serie completate</p><div className="summary-duration"><span>Durata</span><strong>{summary.duration}</strong></div><p>{summary.days}/{workoutDays.length} allenamenti completati questa settimana</p><p>Streak: {summary.streak} allenamenti completati</p>{summary.changes.map(change=><div className="summary-change" key={change.name}><b>{change.name}</b>{change.load&&<p>Carico: {change.load}</p>}{change.reps&&<p>Ripetizioni: {change.reps}</p>}{change.coach&&<p>✓ Obiettivo coach +KG raggiunto</p>}</div>)}</SwipeDialog>}
 
     {pendingWeek!==null&&<SwipeDialog title={`Aggiungere Settimana ${pendingWeek}?`} onClose={()=>{if(!weekBusy)setPendingWeek(null)}}><p>La nuova settimana sarà disponibile nella scheda.</p>{actionError&&<p className="error" role="alert">{actionError}</p>}<button className="secondary" disabled={weekBusy} onClick={()=>setPendingWeek(null)}>Annulla</button><button className="primary" disabled={weekBusy} onClick={async()=>{if(weekBusy)return;setWeekBusy(true);setActionError('');try{setWeek(await addWeek(activeSheet.id));if(workoutDays[0])setSelectedDayId(workoutDays[0].id);setPendingWeek(null)}catch(e){setActionError(e instanceof Error?e.message:'Settimana non aggiunta.')}finally{setWeekBusy(false)}}}>Aggiungi settimana</button></SwipeDialog>}
@@ -233,9 +238,11 @@ function SessionDetails({id}:{id:string}) {
   return <details className="session-details"><summary>Dettaglio serie</summary>{sets.map(set=><p key={set.id}><strong>{set.exerciseName}</strong> · S{set.setNumber}: {set.weight||'—'} kg × {set.reps||'—'} {set.completed?'✓':''}</p>)}</details>
 }
 
-function HistoryView({ days, sessions }: { days: WorkoutDay[]; sessions: Array<{id:string;sheetId:string;dayId:string;weekNumber:number;startedAt:number;endedAt:number;completionMode?:string}> }) {
+function HistoryView({ days, sessions, active, onBack }: { active:boolean; onBack:()=>void; days: WorkoutDay[]; sessions: Array<{id:string;sheetId:string;dayId:string;weekNumber:number;startedAt:number;endedAt:number;completionMode?:string}> }) {
+  const historyRef=useRef<HTMLElement>(null),historyScroll=useRef(0)
+  useLayoutEffect(()=>{if(active&&historyRef.current)historyRef.current.scrollTop=historyScroll.current},[active])
   const sheets=useLiveQuery(()=>db.sheets.toArray())??[]
-  return <main className="page-view"><div className="page-title"><div><span>STORICO</span><h2>Allenamenti · {sessions.length} completati</h2></div></div>
+  return <main ref={historyRef} onScroll={e=>{if(active)historyScroll.current=e.currentTarget.scrollTop}} className="page-view" hidden={!active} style={{display:active?undefined:"none"}}><BackButton onBack={onBack}/><div className="page-title"><div><span>STORICO</span><h2>Allenamenti · {sessions.length} completati</h2></div></div>
     {!sessions.length ? <div className="empty-card"><strong>Nessun allenamento concluso</strong><span>Quando chiuderai un workout comparirà qui.</span></div> : sessions.map((session) => {
       const day = days.find((item) => item.id === session.dayId)
       return <article className="history-card" key={session.id}><div><span>{sheets.find(sheet=>sheet.id===session.sheetId)?.name??'Scheda'} · Settimana {session.weekNumber}</span><h3>{day?.title ?? 'Allenamento'}</h3><small>{new Date(session.endedAt).toLocaleDateString('it-IT',{day:'2-digit',month:'short',year:'numeric'})}</small></div><div className="history-side"><div className="history-duration">{formatDuration(session.endedAt-session.startedAt)}<small>{session.completionMode==='early'?'anticipato':'completo'}</small></div><div className="history-actions"><button onClick={()=>void exportHistoryPdf(session.id)}>PDF</button><button onClick={()=>void exportHistoryExcel(session.id)}>XLS</button></div></div><SessionDetails id={session.id}/></article>

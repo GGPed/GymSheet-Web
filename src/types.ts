@@ -1,5 +1,6 @@
+import type { SupersetPart } from './superset'
 export type ThemePreference = 'system' | 'light' | 'dark'
-export type SheetSource = 'excel' | 'android' | 'web-backup'
+export type SheetSource = 'excel' | 'word' | 'android' | 'web-backup'
 export type CompletionMode = 'complete' | 'early'
 
 export interface Sheet {
@@ -18,6 +19,7 @@ export interface WorkoutDay {
   dayIndex: number
   title: string
   mobility: 0 | 1
+  label?: string
 }
 
 export interface Exercise {
@@ -28,6 +30,7 @@ export interface Exercise {
   recoveryLabel: string
   recoverySeconds: number
   trainerNote: string
+  components?: SupersetPart[]
 }
 
 export interface Prescription {
@@ -38,6 +41,8 @@ export interface Prescription {
 }
 
 export interface SetLog {
+  weightEdited?: boolean
+  loadPrepared?: boolean
   id: string
   exerciseId: string
   weekNumber: number
@@ -83,6 +88,7 @@ export interface ParsedSheet {
   days: WorkoutDay[]
   exercises: Exercise[]
   prescriptions: Prescription[]
+  warnings?: string[]
 }
 
 export interface GymSheetBackupV1 {

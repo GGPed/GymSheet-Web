@@ -2,6 +2,7 @@ import Dexie, { type EntityTable } from 'dexie'
 import type { Exercise, ParsedSheet, Prescription, SessionSet, SetLog, Setting, Sheet, WorkoutDay, WorkoutSession } from './types'
 import { uid } from './utils'
 import { effectivePrescription, trainingSetCount } from './training'
+import {supersetParts} from './superset'
 
 class GymSheetDB extends Dexie {
   sheets!: EntityTable<Sheet, 'id'>
@@ -58,7 +59,17 @@ export async function assertWorkoutUnlocked(): Promise<void> {
   if (await getSetting<number>('recoveryEndAt', 0) > Date.now()) throw new Error('Recupero in corso. Attendi la fine oppure usa Salta recupero.')
 }
 
+// A text note does not advance the workout or change a registered set.
+export async function saveExerciseNote(exerciseId: string, week: number, note: string): Promise<void> {
+  const key = `exerciseNote:${exerciseId}:${week}`
+  await db.transaction('rw', db.settings, async () => {
+    const existing = (await db.settings.get(key))?.value as object | undefined
+    await db.settings.put({key, value: {...existing, note, updatedAt: Date.now()}})
+  })
+}
+
 export async function startWorkout(sheetId: string, dayId: string, weekNumber: number): Promise<WorkoutSession> {
+  return db.transaction('rw',[db.workoutSessions,db.sessionSets,db.exercises,db.prescriptions,db.setLogs,db.settings],async()=>{
   await assertWorkoutUnlocked()
   const existing = await db.workoutSessions.where('active').equals(1).first()
   if (existing) return existing
@@ -66,8 +77,48 @@ export async function startWorkout(sheetId: string, dayId: string, weekNumber: n
     id: uid('session'), sheetId, dayId, weekNumber,
     startedAt: Date.now(), endedAt: 0, active: 1
   }
+  const exercises=await db.exercises.where('dayId').equals(dayId).toArray()
+  const previousSessions=(await db.workoutSessions.where('dayId').equals(dayId).toArray())
+    .filter(s=>s.sheetId===sheetId&&!s.active&&s.endedAt>0&&s.weekNumber!==weekNumber)
+    .sort((a,b)=>b.startedAt-a.startedAt)
+  for(const exercise of exercises){
+    let prior:SessionSet[]=[],priorSession:WorkoutSession|undefined
+    for(const candidate of previousSessions){
+      const rows=(await db.sessionSets.where('sessionId').equals(candidate.id).toArray())
+        .filter(row=>row.exerciseId===exercise.id&&row.completed&&row.weight.trim())
+        .sort((a,b)=>a.setNumber-b.setNumber)
+      if(rows.length){prior=rows;priorSession=candidate;break}
+    }
+    if(!prior.length||!priorSession)continue
+    const prescription=effectivePrescription(await db.prescriptions.where('exerciseId').equals(exercise.id).toArray(),weekNumber)
+    const count=trainingSetCount(prescription?.program??'',await db.setLogs.where('[exerciseId+weekNumber]').equals([exercise.id,weekNumber]).toArray())
+    const parts=exercise.components??supersetParts(prescription?.program??'',exercise.name)
+    for(let n=1;n<=count;n++){
+      const source=prior.find(row=>row.setNumber===n)??prior[prior.length-1]
+      const id=`${exercise.id}:${weekNumber}:${n}`,current=await db.setLogs.get(id)
+      if(!current?.completed&&!current?.weightEdited&&!current?.weight.trim()){
+        await db.setLogs.put({id,exerciseId:exercise.id,weekNumber,setNumber:n,reps:'',completed:0,updatedAt:Date.now(),...current,weight:source.weight,loadPrepared:true})
+      }
+      if(parts.some(part=>part.load)){
+        const key=`superset:${exercise.id}:${weekNumber}:${n}`
+        const values=(await db.settings.get(key))?.value as Record<number,{weight?:string;weightEdited?:boolean}>??{}
+        const previous=(await db.settings.get(`superset:${exercise.id}:${priorSession.weekNumber}:${source.setNumber}`))?.value as Record<number,{weight?:string}>??{}
+        const next={...values}
+        const oldMax=Math.max(0,...Object.values(previous).map(v=>Number(v.weight?.replace(',','.')??0)))
+        parts.forEach((part,index)=>{
+          if(!part.load||values[index]?.weightEdited||values[index]?.weight?.trim())return
+          const old=previous[index]?.weight
+          const corrected=old&&Number(old.replace(',','.'))===oldMax?source.weight:old
+          if(corrected!==undefined)next[index]={...values[index],weight:corrected}
+          else if(parts.filter(p=>p.load).length===1)next[index]={...values[index],weight:source.weight}
+        })
+        await db.settings.put({key,value:next})
+      }
+    }
+  }
   await db.workoutSessions.add(session)
   return session
+  })
 }
 
 export async function finishWorkout(session: WorkoutSession, mode: 'complete' | 'early'): Promise<void> {
@@ -125,7 +176,7 @@ export async function updateSetLog(exerciseId: string, weekNumber: number, setNu
   return db.transaction('rw', db.setLogs, db.sessionSets, db.workoutSessions, db.exercises, db.settings, async () => {
     await assertWorkoutUnlocked()
     const current = await db.setLogs.get(id)
-    const next: SetLog = { id, exerciseId, weekNumber, setNumber, weight: current?.weight ?? '', reps: current?.reps ?? '', completed: current?.completed ?? 0, updatedAt: Date.now(), ...patch }
+    const next: SetLog = { id, exerciseId, weekNumber, setNumber, weight: current?.weight ?? '', reps: current?.reps ?? '', completed: current?.completed ?? 0, weightEdited:current?.weightEdited, loadPrepared:current?.loadPrepared, updatedAt: Date.now(), ...patch, ...('weight' in patch?{weightEdited:true,loadPrepared:true}:{}) }
     if (!next.weight.trim() || !next.reps.trim()) next.completed = 0
     await db.setLogs.put(next)
     const exercise = await db.exercises.get(exerciseId)

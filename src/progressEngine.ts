@@ -15,6 +15,7 @@ export interface ExerciseProgress { exercise:Exercise; executions:Execution[]; s
 
 export function repTargets(program:string): {min:number[];max:number[];range:boolean}|null {
   const text=program.replace(/×/g,'x')
+  if (/\b(?:sec|secondi)\b/i.test(text)) return null
   // Compound, timed and MAX prescriptions do not have an unambiguous numeric rep total.
   if (/\b(?:max|amrap|emom|plank|planch|set\b)|\d\s*\+\s*\d/i.test(text))return null
   const matches=[...text.matchAll(/\b(\d+)\s*x\s*(\d+)(?:\s*\/\s*(\d+))?/gi)]
@@ -53,14 +54,14 @@ export function buildProgress(exercises:Exercise[],prescriptions:Prescription[],
       const rows=snapshots.filter(s=>s.sessionId===session.id&&s.exerciseId===exercise.id)
       const live=logs.filter(l=>l.exerciseId===exercise.id&&l.weekNumber===session.weekNumber)
       const source=session.active?live:rows
-      if(!source.some(r=>r.weight.trim()||r.reps.trim()))continue
+      if(!source.some(r=>r.completed||r.reps.trim()||(!('loadPrepared' in r&&r.loadPrepared)&&r.weight.trim())))continue
       seenWeeks.add(session.weekNumber)
       candidates.push({id:session.id,week:session.weekNumber,at:session.endedAt||Math.max(session.startedAt,...live.map(l=>l.updatedAt)),program:rows[0]?.prescribed||effectivePrescription(prescriptions.filter(p=>p.exerciseId===exercise.id),session.weekNumber)?.program||'',rows:source})
     }
     for(const week of new Set(logs.filter(l=>l.exerciseId===exercise.id).map(l=>l.weekNumber))){
       if(seenWeeks.has(week))continue
       const rows=logs.filter(l=>l.exerciseId===exercise.id&&l.weekNumber===week)
-      if(!rows.some(r=>r.weight.trim()||r.reps.trim()))continue
+      if(!rows.some(r=>r.completed||r.reps.trim()||(!r.loadPrepared&&r.weight.trim())))continue
       candidates.push({id:`logs:${exercise.id}:${week}`,week,at:Math.max(...rows.map(l=>l.updatedAt)),program:effectivePrescription(prescriptions.filter(p=>p.exerciseId===exercise.id),week)?.program||'',rows})
     }
     const executions:Execution[]=[]

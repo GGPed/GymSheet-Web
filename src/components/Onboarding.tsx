@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { ExcelImportDialog } from './ExcelImportDialog'
+import { SheetImportDialog } from './SheetImportDialog'
 import { restoreWebBackup } from '../services/backup'
 
 export function Onboarding() {
@@ -21,15 +21,15 @@ export function Onboarding() {
     <section className="welcome-card">
       <div className="welcome-icon"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14 3H5v18h14V8l-5-5Z M14 3v5h5 M8 14h8 M12 10l4 4-4 4"/></svg></div>
       <h2>Importa la scheda</h2>
-      <p>File Excel <strong>.xlsx</strong> o <strong>.xls</strong> con blocchi FULL BODY oppure tabelle Esercizio, Svolgimento e workout da A a G.</p>
-      <button className="primary" disabled={busy} onClick={() => excel.current?.click()}>Importa Excel</button>
-      <input ref={excel} hidden type="file" accept=".xlsx,.xls" onChange={(e) => { const file=e.target.files?.[0]; if(file)setExcelFile(file);e.target.value='' }} />
+      <p>Schede Excel <strong>.xlsx / .xls</strong> o Word <strong>.docx / .doc</strong>, con workout da A a G.</p>
+      <button className="primary" disabled={busy} onClick={() => excel.current?.click()}>Importa scheda</button>
+      <input ref={excel} hidden type="file" accept=".xlsx,.xls,.doc,.docx" onChange={(e) => { const file=e.target.files?.[0]; if(file)setExcelFile(file);e.target.value='' }} />
       <div className="or"><span />oppure<span /></div>
       <button className="secondary" disabled={busy} onClick={()=>restore.current?.click()}>Ripristina backup Web</button>
       <input hidden ref={restore} type="file" accept=".gsw,application/json" onChange={e=>{const file=e.target.files?.[0];if(file)void run(()=>restoreWebBackup(file))}}/>
       {busy && <p className="status">Sto importando…</p>}
       {error && <p className="error">{error}</p>}
     </section>
-    {excelFile&&<ExcelImportDialog file={excelFile} onClose={()=>setExcelFile(null)} onImported={()=>setExcelFile(null)}/>}
+    {excelFile&&<SheetImportDialog file={excelFile} onClose={()=>setExcelFile(null)} onImported={()=>setExcelFile(null)}/>}
   </main>
 }

@@ -1,6 +1,8 @@
+import {BackButton} from './BackButton'
+import {workoutLetter} from '../utils'
 import {imageForExercise} from '../services/images'
 import { db } from '../db'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useLayoutEffect } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { progressData } from '../services/progress'
 import { exportProgressReport } from '../services/progressReport'
@@ -8,8 +10,12 @@ import { kg, type Execution, type ExerciseProgress, type Period, type LoadState 
 import {friendlyProgress,objective} from '../progressPresentation'
 import { chartGeometry } from '../progressChart'
 
-export function ProgressPage({sheetId}:{sheetId:string}) {
+export function ProgressPage({sheetId,active=true,onBack}:{sheetId:string;active?:boolean;onBack:()=>void}) {
   const [period,setPeriod]=useState<Period>('all'),[exerciseId,setExerciseId]=useState(''),[error,setError]=useState(''),[exporting,setExporting]=useState(false),[collapsed,setCollapsed]=useState<Record<string,boolean>>({})
+  const pageRef=useRef<HTMLElement>(null),listScroll=useRef(0),pageScroll=useRef(0)
+  const openDetail=(id:string)=>{listScroll.current=pageRef.current?.scrollTop??0;setExerciseId(id)}
+  useLayoutEffect(()=>{if(pageRef.current)pageRef.current.scrollTop=exerciseId?0:listScroll.current},[exerciseId])
+  useLayoutEffect(()=>{if(active&&pageRef.current)pageRef.current.scrollTop=pageScroll.current},[active])
   const [stateFilter,setStateFilter]=useState<LoadState|null>(null)
   const data=useLiveQuery(()=>progressData(sheetId,period),[sheetId,period])
   const days=useLiveQuery(()=>db.days.where('sheetId').equals(sheetId).sortBy('dayIndex'),[sheetId])??[]
@@ -21,13 +27,13 @@ export function ProgressPage({sheetId}:{sheetId:string}) {
   const visibleData=data?.filter(item=>!stateFilter||item.state===stateFilter)??[]
   const detail=data?.find(item=>item.exercise.id===exerciseId)
   const report=async()=>{setError('');setExporting(true);try{await exportProgressReport(sheetId,period)}catch(e){setError(e instanceof Error?e.message:'Report non disponibile.')}finally{setExporting(false)}}
-  return <main className="page-view progress-page"><div className="page-title"><h2>Progressi</h2><button disabled={exporting} onClick={()=>void report()}>{exporting?'Preparazione…':<><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></svg> Scarica PDF</>}</button></div>
+  return <main onScroll={e=>{if(active)pageScroll.current=e.currentTarget.scrollTop}} ref={pageRef} className="page-view progress-page" hidden={!active} style={{display:active?undefined:"none"}}><BackButton onBack={exerciseId?()=>setExerciseId(''):onBack}/><div className="page-title"><h2>Progressi</h2><button disabled={exporting} onClick={()=>void report()}>{exporting?'Preparazione…':<><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></svg> Scarica PDF</>}</button></div>
     <PeriodFilter value={period} onChange={setPeriod}/>
     {error&&<p className="error" role="alert">{error}</p>}
     {!data?<p role="status">Caricamento progressi…</p>:<>
       {!detail&&<><div className="progress-dashboard">{([{state:'up',label:'In crescita'},{state:'same',label:'Stabili'},{state:'down',label:'In calo'}] as const).map(({state,label})=><button type="button" className={`${state} ${stateFilter===state?'active':''}`} aria-pressed={stateFilter===state} aria-label={`Filtra ${label}`} onClick={()=>setStateFilter(current=>current===state?null:state)} key={state}><strong>{data.filter(i=>i.state===state).length}</strong><span>{label}</span></button>)}</div>
       {!data.some(i=>['up','same','down'].includes(i.state))&&<p className="progress-empty-hint">I dati compariranno dopo i primi allenamenti.</p>}{stateFilter&&!visibleData.length&&<p className="progress-empty-hint" role="status">Nessun esercizio {stateFilter==='up'?'in crescita':stateFilter==='same'?'stabile':'in calo'} nel periodo selezionato.</p>}</>}
-      {detail?<><button className="secondary" onClick={()=>setExerciseId('')}>← Tutti gli esercizi</button><ExerciseProgressDetail key={detail.exercise.id+String(period)} item={detail} workout={String.fromCharCode(65+days.filter(d=>!d.mobility).findIndex(d=>d.id===detail.exercise.dayId))}/></>:days.filter(day=>!day.mobility).map((day,index)=>{const matches=visibleData.filter(item=>item.exercise.dayId===day.id);if(stateFilter&&!matches.length)return null;return <section key={day.id} className="progress-day"><button className="progress-day-heading" aria-expanded={!collapsed[day.id]} onClick={()=>setCollapsed(v=>({...v,[day.id]:!v[day.id]}))}>{String.fromCharCode(65+index)}<span aria-hidden="true">{collapsed[day.id]?'+':'−'}</span></button><div className="progress-day-body" hidden={collapsed[day.id]}>{matches.map(item=><article className={`progress-exercise ${stateFilter?'filtered '+item.state:''}`} key={item.exercise.id}><img className="progress-thumbnail" src={imageForExercise(item.exercise.name,item.executions.at(-1)?.program??'',item.exercise.trainerNote)} onError={e=>{e.currentTarget.onerror=null;e.currentTarget.src=`${import.meta.env.BASE_URL}exercise-unavailable.svg`}} alt=""/><div className="progress-exercise-copy"><h3>{item.exercise.name}</h3>{stateFilter&&<span className="progress-state-label">{item.state==='up'?'In crescita':item.state==='same'?'Stabile':'In calo'}</span>}<p>{item.executions.length?`${kg(item.current)} kg · ${friendlyProgress(item).status}`:'Nessuna esecuzione nel periodo'}</p></div><button className="progress-detail-cta" aria-label={`Vai al dettaglio ${item.exercise.name}`} onClick={()=>setExerciseId(item.exercise.id)}>Vai al dettaglio</button></article>)}</div></section>})}
+      {detail?<><ExerciseProgressDetail key={detail.exercise.id+String(period)} item={detail} workout={workoutLetter(days.find(d=>d.id===detail.exercise.dayId),days.filter(d=>!d.mobility).findIndex(d=>d.id===detail.exercise.dayId))}/></>:days.filter(day=>!day.mobility).map((day,index)=>{const matches=visibleData.filter(item=>item.exercise.dayId===day.id);if(stateFilter&&!matches.length)return null;return <section key={day.id} className="progress-day"><button className="progress-day-heading" aria-expanded={!collapsed[day.id]} onClick={()=>setCollapsed(v=>({...v,[day.id]:!v[day.id]}))}>{workoutLetter(day,index)}<span aria-hidden="true">{collapsed[day.id]?'+':'−'}</span></button><div className="progress-day-body" hidden={collapsed[day.id]}>{matches.map(item=><article className={`progress-exercise ${stateFilter?'filtered '+item.state:''}`} key={item.exercise.id}><img className="progress-thumbnail" src={imageForExercise(item.exercise.name,item.executions.at(-1)?.program??'',item.exercise.trainerNote)} onError={e=>{e.currentTarget.onerror=null;e.currentTarget.src=`${import.meta.env.BASE_URL}exercise-unavailable.svg`}} alt=""/><div className="progress-exercise-copy"><h3>{item.exercise.name}</h3>{stateFilter&&<span className="progress-state-label">{item.state==='up'?'In crescita':item.state==='same'?'Stabile':'In calo'}</span>}<p>{item.executions.length?`${kg(item.current)} kg · ${friendlyProgress(item).status}`:'Nessuna esecuzione nel periodo'}</p></div><button className="progress-detail-cta" aria-label={`Vai al dettaglio ${item.exercise.name}`} onClick={()=>openDetail(item.exercise.id)}>Vai al dettaglio</button></article>)}</div></section>})}
     </>}
   </main>
 }

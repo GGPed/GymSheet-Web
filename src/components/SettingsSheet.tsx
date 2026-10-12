@@ -8,7 +8,7 @@ import {exportHistoryExcel,exportHistoryPdf} from '../services/export'
 import {PeriodFilter} from './ProgressPage'
 import {SheetArchive} from './ParityFeatures'
 import {SwipeDialog} from './SwipeDialog'
-import {ExcelImportDialog} from './ExcelImportDialog'
+import {SheetImportDialog} from './SheetImportDialog'
 import {NotificationGuide} from './NotificationGuide'
 
 interface Props {onHistory:()=>void;open:boolean;onClose:()=>void}
@@ -42,11 +42,11 @@ export function SettingsSheet({open,onClose,onHistory}:Props) {
   }
   const feedback=(owner:string,includeDownload=true)=>feedbackOwner===owner?<div className="menu-feedback">{busy&&<p role="status">Preparazione in corso…</p>}{error&&<p className="error" role="alert">{error}</p>}{success&&<p className="operation-success" role="status">{success}</p>}{includeDownload&&generatedDownload&&<a className="generated-download" href={generatedDownload.url} download={generatedDownload.filename}>Scarica {generatedDownload.filename.endsWith('.gsw')?'backup':generatedDownload.filename.endsWith('.pdf')?'PDF':'file Excel'}</a>}</div>:null
   if(!open)return null
-  if(file)return <ExcelImportDialog file={file} onClose={()=>setFile(null)} onImported={()=>{setFile(null);onClose()}}/>
+  if(file)return <SheetImportDialog file={file} onClose={()=>setFile(null)} onImported={()=>{setFile(null);onClose()}}/>
   return <SwipeDialog onClose={onClose} title="GymSheet" className="settings-sheet">
     <MenuAccordion title="Schede archiviate" subtitle="Apri una scheda precedente" icon={<MenuIcon kind="archive"/>} open={archive} onToggle={()=>setArchive(v=>!v)}><SheetArchive onClose={onClose} onError={fail}/>{feedback('archive')}</MenuAccordion>
     <MenuAccordion title="Carica nuova scheda" subtitle="Lo storico precedente resta salvato" icon={<MenuIcon kind="import"/>} open={importOptions} onToggle={()=>setImportOptions(v=>!v)}><p className="import-save-prompt">Salva lo storico prima di continuare</p><div className="menu-inline-actions"><button className="secondary" disabled={busy} onClick={()=>void run('import',async()=>{await exportHistoryPdf(undefined,period);excel.current?.click()})}><MenuIcon kind="download"/>Scarica PDF</button><button className="secondary" disabled={busy} onClick={()=>void run('import',async()=>{await exportHistoryExcel();excel.current?.click()})}><MenuIcon kind="download"/>Scarica Excel</button></div><button className="menu-text-action" disabled={busy} onClick={()=>excel.current?.click()}>Continua senza esportare</button>{feedback('import')}</MenuAccordion>
-    <input hidden ref={excel} type="file" accept=".xlsx,.xls" onChange={e=>{const f=e.target.files?.[0];if(f)setFile(f);e.target.value=''}}/>
+    <input hidden ref={excel} type="file" accept=".xlsx,.xls,.doc,.docx" onChange={e=>{const f=e.target.files?.[0];if(f)setFile(f);e.target.value=''}}/>
     <section className="menu-section backup-section"><div className="menu-row"><MenuIcon kind="backup"/><span>Crea backup completo<small>Salva schede, storico e impostazioni</small></span></div>{feedbackOwner==='backup'&&generatedDownload?<a className="secondary backup-download" href={generatedDownload.url} download={generatedDownload.filename}><MenuIcon kind="download"/>Scarica backup</a>:<button className="secondary backup-download" disabled={busy} onClick={()=>void backup()}><MenuIcon kind="download"/>Scarica backup</button>}{feedback('backup',false)}</section>
     <MenuAccordion title="Ripristina backup Web" icon={<MenuIcon kind="restore"/>} open={restoreOptions} onToggle={()=>setRestoreOptions(v=>!v)}><p>Carica un backup creato con GymSheet.</p><button className="secondary" disabled={busy} onClick={()=>restore.current?.click()}>Seleziona backup</button>{feedback('restore')}</MenuAccordion>
     <input hidden ref={restore} type="file" accept=".gsw,application/json" onChange={e=>{const f=e.target.files?.[0];e.target.value='';if(f)void run('restore',async()=>{if(!confirm('Ripristinare il backup? I dati attuali saranno sostituiti. Crea prima un backup se vuoi conservarli.'))return false;await restoreWebBackup(f);window.setTimeout(()=>location.reload(),1800)},'Backup ripristinato. Aggiornamento app…')}}/>
